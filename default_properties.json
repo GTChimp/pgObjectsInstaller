@@ -1,0 +1,17 @@
+{
+  "repo": {
+    "remote_path": "https://github.com/GTChimp/pg_dummydb.git",
+    "local_path": {
+      "env": "userprofile",
+      "path": "/Desktop/pg_repo"
+    },
+    "branch": "master",
+    "folder": "init"
+  },
+  "db": {
+    "host": "localhost",
+    "port": 5432,
+    "dbname": "test_db",
+    "user": "tester"
+  }
+}
