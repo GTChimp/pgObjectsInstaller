@@ -45,11 +45,16 @@ Key *repo* represents git repository properties needed for cloning and composing
  - *remote_path* - url of your Postgresql repo
  - *local_path* - path whither repo should be cloned, *env* - environment variable(set null if not needed), *path* - path to destination folder
  - *branch* - branch name or commit SHA-1
- - *folder*- name of the subfolder of Requests catalog
+ - *folder* - name of the subfolder of Requests catalog
 
-Key *db* represent database connection properties.
+Key *db* represents database connection properties.
 
 # Misc options
 #### List of additinal options
 
  - at propmpts time here is a possibility to chose deploy mode, i.e. deploy all your .sql scripts as single statement  or separately. The default is separate mode. In order for the "one statement" mode to function correctly, your DDLs and PL/pgSQL statements must have tagged dollar quoting.
+
+# Notes
+
+ - for now supported only UTF-8 files encoding
+ - if your repository requires additional authentication(organization's policies etc.) and the credentials aren't stored in credentials manager you can get error trying to clone the repo first time
