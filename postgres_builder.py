@@ -14,7 +14,7 @@ from maskpass import askpass
 # '%userprofile%/Desktop/atata/build' --add-data "default_properties.json:." --add-data "misc:misc" --onefile
 
 
-class PostgresBuilder:
+class PostgresObjInstaller:
 
     @staticmethod
     def resource_path(relative_path):
@@ -137,6 +137,7 @@ class PostgresBuilder:
         self.db_properties.user = input(
             f'Enter the user name for db connection, default user is: {self.db_properties.user}\n')
         self.db_properties.password = askpass(prompt=f'Enter the password for db connection\n')
+        print(self.db_properties.password)
         connection = connect(**self.db_properties.as_dict())
         connection.set_session(autocommit=True)
 
@@ -149,11 +150,13 @@ class PostgresBuilder:
             print(cc.statusmessage)
 
     class DeployMode(Enum):
-        SEPARATE_STATEMENTS = 'n'
-        SINGLE_STATEMENT = 'y'
+        SEPARATE_STATEMENTS = 'separate'
+        SINGLE_STATEMENT = 'single'
 
     def deploy_objects(self):
-        self.deploy_mode = input(f'Execute scripts as single statement?(y/n), default is: {self.deploy_mode}\n')
+        self.deploy_mode = input(
+            f'Execute scripts as single statement or separately (single/separate)? '
+            f'Default mode is: {self.deploy_mode}\n')
         if self.deploy_mode not in (_.value for _ in self.DeployMode):
             raise RuntimeError('Invalid deploy mode')
 
@@ -194,18 +197,17 @@ class PostgresBuilder:
 
 if __name__ == '__main__':
     try:
-        pg_builder = PostgresBuilder()
+        pg_builder = PostgresObjInstaller()
         pg_builder.clone_repo()
         pg_builder.switch_branch()
         pg_builder.check_folder_and_scripts()
         pg_builder.deploy_objects()
     except Exception:
-        from sys import exc_info
 
-        print(exc_info()[0])
+        print(sys.exc_info()[0])
         from traceback import format_exc
 
         print(format_exc())
     finally:
-        print("Press Enter to close the window")
+        print('Press Enter to close the window')
         input()
