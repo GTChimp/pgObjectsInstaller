@@ -1,5 +1,8 @@
+from os import getenv, path, chmod, environ
+from poi_lib import resource_path
+
+environ['GIT_PYTHON_GIT_EXECUTABLE'] = resource_path(r'misc/PortableGit-2.45.0-64-bit/bin/git.exe')
 from git import Repo
-from os import getenv, path, chmod
 import shutil
 from stat import S_IWRITE
 from warnings import warn
@@ -16,14 +19,8 @@ from maskpass import askpass
 
 class PostgresObjInstaller:
 
-    @staticmethod
-    def resource_path(relative_path):
-        """ Get absolute path to resource, works for dev and for PyInstaller """
-        base_path = getattr(sys, '_MEIPASS', path.dirname(path.abspath(__file__)))
-        return path.join(base_path, relative_path)
-
     def __init__(self):
-        with open(self.resource_path(r'default_properties.json'), mode='rt',
+        with open(resource_path(r'default_properties.json'), mode='rt',
                   encoding='UTF-8') as f:
             data = load(f)
         self.repo_properties = self.RepositoryProperties(data['repo'])
@@ -137,7 +134,6 @@ class PostgresObjInstaller:
         self.db_properties.user = input(
             f'Enter the user name for db connection, default user is: {self.db_properties.user}\n')
         self.db_properties.password = askpass(prompt=f'Enter the password for db connection\n')
-        print(self.db_properties.password)
         connection = connect(**self.db_properties.as_dict())
         connection.set_session(autocommit=True)
 
@@ -176,14 +172,14 @@ class PostgresObjInstaller:
             fpath = path.abspath(f'{self.repo_properties.local_path}/{fname}')
 
             with open(fpath, mode='wt', encoding='UTF-8') as f1:
-                with open(self.resource_path(r'misc/start_single_statement.txt'), mode='rt', encoding='UTF-8') as f2:
+                with open(resource_path(r'misc/start_single_statement.txt'), mode='rt', encoding='UTF-8') as f2:
                     st = f2.read()
                 f1.write(st)
 
                 for _, __ in self.script_list:
                     f1.write(f'{self.read_sql(_)}\n\n')
 
-                with open(self.resource_path(r'misc/end_single_statement.txt'), mode='rt', encoding='UTF-8') as f2:
+                with open(resource_path(r'misc/end_single_statement.txt'), mode='rt', encoding='UTF-8') as f2:
                     st = f2.read()
 
                 f1.write(st)
