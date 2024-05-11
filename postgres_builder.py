@@ -1,7 +1,8 @@
-from os import getenv, path, chmod, environ
+from os import getenv, path, chmod, environ, getcwd
 from poi_lib import resource_path
 
-environ['GIT_PYTHON_GIT_EXECUTABLE'] = resource_path(r'misc/PortableGit-2.45.0-64-bit/bin/git.exe')
+environ['GIT_PYTHON_GIT_EXECUTABLE'] = path.abspath(resource_path(r'misc/PortableGit-2.45.0-64-bit/bin/git.exe'))
+
 from git import Repo
 import shutil
 from stat import S_IWRITE
@@ -11,6 +12,7 @@ from json import load
 from enum import Enum
 import sys
 from maskpass import askpass
+from datetime import datetime
 
 
 # pyinstaller postgres_builder.py --distpath '%userprofile%/Desktop/atata' --clean --workpath
@@ -18,9 +20,17 @@ from maskpass import askpass
 
 
 class PostgresObjInstaller:
+    __properties_file = r'default_properties.json'
+    __log_file = r'install.log'
+
+    def log_and_print(self, message):
+        with open(f'{self.repo_properties.local_path}/{self.__log_file}', mode='a', encoding='UTF-8') as f:
+            f.write(f'{datetime.now()}: {message}\n')
+
+        print(message)
 
     def __init__(self):
-        with open(resource_path(r'default_properties.json'), mode='rt',
+        with open(resource_path(self.__properties_file), mode='rt',
                   encoding='UTF-8') as f:
             data = load(f)
         self.repo_properties = self.RepositoryProperties(data['repo'])
@@ -89,19 +99,20 @@ class PostgresObjInstaller:
             pass
 
         self.repo = Repo.clone_from(self.repo_properties.remote_path, self.repo_properties.local_path)
+        self.log_and_print('Finish cloning repo')
 
     def switch_branch(self):
         self.repo_properties.branch = input(
             f'Enter a branch name or commit SHA-1, default branch is: {self.repo_properties.branch}\n').strip()
-        print(f'Switching repo to {self.repo_properties.branch}')
+        self.log_and_print(f'Switching repo to {self.repo_properties.branch}')
         self.repo.git.checkout(self.repo_properties.branch)
 
-    @staticmethod
-    def check_scripts(script_list: list[tuple]):
+    def check_scripts(self, script_list: list[tuple]):
         for _, __ in script_list:
             if not path.exists(_):
-                print(f'Specified script doesn\'t exist {__}')
-                exit('Fill objects.inst file with correct script paths and try again')
+                self.log_and_print(f'Specified script doesn\'t exist {__}')
+                self.log_and_print('Fill objects.inst file with correct script paths and try again')
+                sys.exit()
         return script_list
 
     def check_folder_and_scripts(self):
@@ -116,7 +127,7 @@ class PostgresObjInstaller:
             file_paths = [(path.abspath(fr'{self.repo_properties.local_path}/{_.rstrip()}'), _.rstrip()) for _ in f if
                           not _.startswith('#')]
         self.script_list = self.check_scripts(file_paths)
-        print(f'List of deploy scripts created successfully')
+        self.log_and_print(f'List of deploy scripts created successfully')
 
     @staticmethod
     def read_sql(filepath):
@@ -139,11 +150,10 @@ class PostgresObjInstaller:
 
         return connection
 
-    @staticmethod
-    def execute_script(sql, connection):
+    def execute_script(self, sql, connection):
         with connection.cursor() as cc:
             cc.execute(sql)
-            print(cc.statusmessage)
+            self.log_and_print(cc.statusmessage)
 
     class DeployMode(Enum):
         SEPARATE_STATEMENTS = 'separate'
@@ -162,11 +172,12 @@ class PostgresObjInstaller:
 
             for _, __ in self.script_list:
                 try:
-                    print(f'Executing script: {__}')
+                    self.log_and_print(f'Executing script: {__}')
                     self.execute_script(self.read_sql(_), connection)
                 except Exception as e:
-                    print(e)
-                    exit('Got errors during deploy execution, further execution is stopped')
+                    self.log_and_print(e)
+                    self.log_and_print('Got errors during deploy execution, further execution is stopped')
+                    sys.exit()
         else:
             fname = r'cur_install.sql'
             fpath = path.abspath(f'{self.repo_properties.local_path}/{fname}')
@@ -184,11 +195,12 @@ class PostgresObjInstaller:
 
                 f1.write(st)
             try:
-                print(f'Executing script: {fpath}')
+                self.log_and_print(f'Executing script: {fpath}')
                 self.execute_script(self.read_sql(fpath), connection)
             except Exception as e:
-                print(e)
-                exit('Got errors during deploy execution, further execution is stopped')
+                self.log_and_print(e)
+                self.log_and_print('Got errors during deploy execution, further execution is stopped')
+                sys.exit()
 
 
 if __name__ == '__main__':
@@ -199,11 +211,11 @@ if __name__ == '__main__':
         pg_builder.check_folder_and_scripts()
         pg_builder.deploy_objects()
     except Exception:
-
-        print(sys.exc_info()[0])
+        pg_builder = PostgresObjInstaller()
+        pg_builder.log_and_print(sys.exc_info()[0])
         from traceback import format_exc
 
-        print(format_exc())
+        pg_builder.log_and_print(format_exc())
     finally:
         print('Press Enter to close the window')
         input()
