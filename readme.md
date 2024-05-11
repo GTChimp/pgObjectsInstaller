@@ -58,3 +58,4 @@ Key *db* represents database connection properties.
 
  - for now supported only UTF-8 files encoding
  - if your repository requires additional authentication(organization's policies etc.) and the credentials aren't stored in credentials manager you can get error trying to clone the repo first time
+ - to make things work git must be installed on your machine, you can get it at https://git-scm.com/download/win. also the "Path" environment variable should contain path to git.exe
