@@ -15,10 +15,6 @@ from maskpass import askpass
 from datetime import datetime
 
 
-# pyinstaller postgres_builder.py --distpath '%userprofile%/Desktop/atata' --clean --workpath
-# '%userprofile%/Desktop/atata/build' --add-data "default_properties.json:." --add-data "misc:misc" --onefile
-
-
 class PostgresObjInstaller:
     __properties_file = r'default_properties.json'
     __log_file = r'install.log'
@@ -33,11 +29,14 @@ class PostgresObjInstaller:
         with open(resource_path(self.__properties_file), mode='rt',
                   encoding='UTF-8') as f:
             data = load(f)
+
         self.repo_properties = self.RepositoryProperties(data['repo'])
         self.db_properties = self.PGConnectionProperties(data['db'])
         self.repo = None
         self.script_list = None
         self.deploy_mode = self.DeployMode.SEPARATE_STATEMENTS.value
+        self.log_table=data['log_table']
+
 
     def __setattr__(self, key, value):
         if (key in self.__dict__ and value != '') or key not in self.__dict__:
@@ -159,6 +158,15 @@ class PostgresObjInstaller:
         SEPARATE_STATEMENTS = 'separate'
         SINGLE_STATEMENT = 'single'
 
+    def get_branch(self):
+        try:
+            return f'{self.repo.active_branch} {self.repo.head.commit}'
+        except TypeError:
+            return self.repo.head.commit
+
+    def get_log_dml(self, is_successful):
+        return f'insert into {self.log_table} values({repr(self.get_branch())}, {repr(self.deploy_mode)}, {is_successful})'
+
     def deploy_objects(self):
         self.deploy_mode = input(
             f'Execute scripts as single statement or separately (single/separate)? '
@@ -175,9 +183,13 @@ class PostgresObjInstaller:
                     self.log_and_print(f'Executing script: {__}')
                     self.execute_script(self.read_sql(_), connection)
                 except Exception as e:
+                    self.execute_script(self.get_log_dml(False), connection)
                     self.log_and_print(e)
                     self.log_and_print('Got errors during deploy execution, further execution is stopped')
                     sys.exit()
+            else:
+                self.execute_script(self.get_log_dml(True), connection)
+
         else:
             fname = r'cur_install.sql'
             fpath = path.abspath(f'{self.repo_properties.local_path}/{fname}')
@@ -197,7 +209,9 @@ class PostgresObjInstaller:
             try:
                 self.log_and_print(f'Executing script: {fpath}')
                 self.execute_script(self.read_sql(fpath), connection)
+                self.execute_script(self.get_log_dml(True), connection)
             except Exception as e:
+                self.execute_script(self.get_log_dml(False), connection)
                 self.log_and_print(e)
                 self.log_and_print('Got errors during deploy execution, further execution is stopped')
                 sys.exit()

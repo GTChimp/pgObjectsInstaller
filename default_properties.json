@@ -13,5 +13,6 @@
     "port": 5432,
     "dbname": "test_db",
     "user": "tester"
-  }
+  },
+  "log_table": "main.log_ci_results"
 }

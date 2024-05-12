@@ -37,7 +37,8 @@ Default properties for the app are represented in the default_properties.json fi
   "port": 5432,  
   "dbname": "test_db",  
   "user": "tester"  
-  }  
+  },
+  "log_table": "main.log_ci_results"  
 }
 ```
 Key *repo* represents git repository properties needed for cloning and composing objects to deploy.
@@ -48,6 +49,8 @@ Key *repo* represents git repository properties needed for cloning and composing
  - *folder* - name of the subfolder of Requests catalog
 
 Key *db* represents database connection properties.
+
+Key *log_table* stores name of the ci log table. It must be present in your database and have structure like [here](https://github.com/GTChimp/pg_dummydb/blob/master/OBJ/Schemas/main/Tables/log_ci_results.sql)
 
 # Misc options
 #### List of additinal options
