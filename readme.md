@@ -22,35 +22,40 @@ Also, the general recommendation is that the user/role used for the deployment w
 
 Default properties for the app are represented in the default_properties.json file.
 ```
-{  
-  "repo": {  
-    "remote_path": "https://github.com/GTChimp/pg_dummydb.git",  
-  "local_path": {  
-      "env": "userprofile",  
-  "path": "/Desktop/pg_repo"  
-  },  
-  "branch": "master",  
-  "folder": "init"  
-  },  
-  "db": {  
-    "host": "localhost",  
-  "port": 5432,  
-  "dbname": "test_db",  
-  "user": "tester"  
+{
+  "repo": {
+    "remote_path": "https://github.com/GTChimp/pg_dummydb.git",
+    "local_path": {
+      "env": "userprofile",
+      "path": "/Desktop/my_proj/pg_repo"
+    },
+    "dist_path": {
+      "env": "userprofile",
+      "path": "/Desktop/my_proj/dist"
+    },
+    "branch": "master",
+    "folder": "init"
   },
-  "log_table": "main.log_ci_results"  
+  "db": {
+    "connection": {
+      "host": "localhost",
+      "port": 5432,
+      "dbname": "test_db",
+      "user": "tester"
+    },
+    "log_table": "main.log_ci_results"
+  }
 }
 ```
 Key *repo* represents git repository properties needed for cloning and composing objects to deploy.
 
  - *remote_path* - url of your Postgresql repo
  - *local_path* - path whither repo should be cloned, *env* - environment variable(set null if not needed), *path* - path to destination folder
+ - *dist_path* - distributive path with scripts for deploying and logs
  - *branch* - branch name or commit SHA-1
  - *folder* - name of the subfolder of Requests catalog
 
-Key *db* represents database connection properties.
-
-Key *log_table* stores name of the ci log table. It must be present in your database and have structure like [here](https://github.com/GTChimp/pg_dummydb/blob/master/OBJ/Schemas/main/Tables/log_ci_results.sql)
+Key *db* represents database connection properties and name of the logging table. The table must be present in your database(or be in ur objects.inst file, if you're using app first time) and have structure like [here](https://github.com/GTChimp/pg_dummydb/blob/master/OBJ/Schemas/main/Tables/log_ci_results.sql)
 
 # Misc options
 #### List of additinal options

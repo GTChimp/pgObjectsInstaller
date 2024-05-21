@@ -1,4 +1,4 @@
-from os import getenv, path, chmod, environ, getcwd
+from os import getenv, path, chmod, environ, makedirs
 from poi_lib import resource_path
 
 environ['GIT_PYTHON_GIT_EXECUTABLE'] = path.abspath(resource_path(r'misc/PortableGit-2.45.0-64-bit/bin/git.exe'))
@@ -20,7 +20,7 @@ class PostgresObjInstaller:
     __log_file = r'install.log'
 
     def log_and_print(self, message):
-        with open(f'{self.repo_properties.local_path}/{self.__log_file}', mode='a', encoding='UTF-8') as f:
+        with open(f'{self.repo_properties.dist_path}/{self.__dist_folder_name}/{self.__log_file}', mode='a', encoding='UTF-8') as f:
             f.write(f'{datetime.now()}: {message}\n')
 
         print(message)
@@ -31,12 +31,12 @@ class PostgresObjInstaller:
             data = load(f)
 
         self.repo_properties = self.RepositoryProperties(data['repo'])
-        self.db_properties = self.PGConnectionProperties(data['db'])
+        self.db_properties = self.PGConnectionProperties(data['db']['connection'])
         self.repo = None
         self.script_list = None
         self.deploy_mode = self.DeployMode.SEPARATE_STATEMENTS.value
-        self.log_table=data['log_table']
-
+        self.log_table = data['db']['log_table']
+        self.__dist_folder_name = None
 
     def __setattr__(self, key, value):
         if (key in self.__dict__ and value != '') or key not in self.__dict__:
@@ -98,16 +98,18 @@ class PostgresObjInstaller:
             pass
 
         self.repo = Repo.clone_from(self.repo_properties.remote_path, self.repo_properties.local_path)
-        self.log_and_print('Finish cloning repo')
 
     def switch_branch(self):
         self.repo_properties.branch = input(
             f'Enter a branch name or commit SHA-1, default branch is: {self.repo_properties.branch}\n').strip()
-        self.log_and_print(f'Switching repo to {self.repo_properties.branch}')
         self.repo.git.checkout(self.repo_properties.branch)
+        _format = '%Y-%d-%m %H.%M.%S'
+        self.get_dist_folder_name = f'{self.get_branch()} {datetime.now().strftime(_format)}'
+        makedirs(path.abspath(
+            fr'{self.repo_properties.dist_path}/{self.get_dist_folder_name}'))
 
     def check_scripts(self, script_list: list[tuple]):
-        for _, __ in script_list:
+        for _, __, k in script_list:
             if not path.exists(_):
                 self.log_and_print(f'Specified script doesn\'t exist {__}')
                 self.log_and_print('Fill objects.inst file with correct script paths and try again')
@@ -123,10 +125,20 @@ class PostgresObjInstaller:
             fr'{self.repo_properties.local_path}/Requests/{self.repo_properties.folder}/objects.inst')
 
         with open(inst_path, mode='rt', encoding='UTF-8') as f:
-            file_paths = [(path.abspath(fr'{self.repo_properties.local_path}/{_.rstrip()}'), _.rstrip()) for _ in f if
-                          not _.startswith('#')]
+            file_paths = [(path.abspath(fr'{self.repo_properties.local_path}/{_.rstrip()}')
+                           , _.rstrip()
+                           , path.abspath(
+                fr'{self.repo_properties.dist_path}/{self.get_dist_folder_name}/{_.rstrip()}'))
+                          for _ in f if not _.startswith('#')]
+
         self.script_list = self.check_scripts(file_paths)
         self.log_and_print(f'List of deploy scripts created successfully')
+
+    def copy_scripts_to_dist_path(self):
+        print('Copying scripts to dist path')
+        for a, l, d in self.script_list:
+            makedirs(path.dirname(d), exist_ok=True)
+            shutil.copy(a, d)
 
     @staticmethod
     def read_sql(filepath):
@@ -167,6 +179,16 @@ class PostgresObjInstaller:
     def get_log_dml(self, is_successful):
         return f'insert into {self.log_table} values({repr(self.get_branch())}, {repr(self.deploy_mode)}, {is_successful})'
 
+    @property
+    def get_dist_folder_name(self):
+
+        return self.__dist_folder_name
+
+    @get_dist_folder_name.setter
+    def get_dist_folder_name(self, value):
+        if self.__dist_folder_name is None:
+            self.__dist_folder_name = value
+
     def deploy_objects(self):
         self.deploy_mode = input(
             f'Execute scripts as single statement or separately (single/separate)? '
@@ -178,10 +200,10 @@ class PostgresObjInstaller:
 
         if self.deploy_mode == self.DeployMode.SEPARATE_STATEMENTS.value:
 
-            for _, __ in self.script_list:
+            for _, __, k in self.script_list:
                 try:
                     self.log_and_print(f'Executing script: {__}')
-                    self.execute_script(self.read_sql(_), connection)
+                    self.execute_script(self.read_sql(k), connection)
                 except Exception as e:
                     self.execute_script(self.get_log_dml(False), connection)
                     self.log_and_print(e)
@@ -192,15 +214,15 @@ class PostgresObjInstaller:
 
         else:
             fname = r'cur_install.sql'
-            fpath = path.abspath(f'{self.repo_properties.local_path}/{fname}')
+            fpath = path.abspath(f'{self.repo_properties.dist_path}/{self.get_dist_folder_name}/{fname}')
 
             with open(fpath, mode='wt', encoding='UTF-8') as f1:
                 with open(resource_path(r'misc/start_single_statement.txt'), mode='rt', encoding='UTF-8') as f2:
                     st = f2.read()
                 f1.write(st)
 
-                for _, __ in self.script_list:
-                    f1.write(f'{self.read_sql(_)}\n\n')
+                for _, __, k in self.script_list:
+                    f1.write(f'{self.read_sql(k)}\n\n')
 
                 with open(resource_path(r'misc/end_single_statement.txt'), mode='rt', encoding='UTF-8') as f2:
                     st = f2.read()
@@ -223,13 +245,13 @@ if __name__ == '__main__':
         pg_builder.clone_repo()
         pg_builder.switch_branch()
         pg_builder.check_folder_and_scripts()
+        pg_builder.copy_scripts_to_dist_path()
         pg_builder.deploy_objects()
     except Exception:
-        pg_builder = PostgresObjInstaller()
-        pg_builder.log_and_print(sys.exc_info()[0])
+        print(sys.exc_info()[0])
         from traceback import format_exc
 
-        pg_builder.log_and_print(format_exc())
+        print(format_exc())
     finally:
         print('Press Enter to close the window')
         input()
