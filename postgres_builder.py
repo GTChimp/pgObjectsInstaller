@@ -6,7 +6,6 @@ environ['GIT_PYTHON_GIT_EXECUTABLE'] = path.abspath(resource_path(r'misc/Portabl
 from git import Repo
 import shutil
 from stat import S_IWRITE
-from warnings import warn
 from psycopg2 import connect
 from json import load
 from enum import Enum
