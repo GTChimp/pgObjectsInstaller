@@ -13,17 +13,20 @@ from enum import Enum
 import sys
 from maskpass import askpass
 from datetime import datetime
+from termcolor import colored, cprint
+from colorama import just_fix_windows_console
 
 
 class PostgresObjInstaller:
     __properties_file = r'default_properties.json'
     __log_file = r'install.log'
+    __prompts_default=['cyan',None,['bold']]
 
-    def log_and_print(self, message):
+    def log_and_print(self, message,color,attrs=None):
         with open(f'{self.repo_properties.dist_path}/{self.__dist_folder_name}/{self.__log_file}', mode='a', encoding='UTF-8') as f:
             f.write(f'{datetime.now()}: {message}\n')
 
-        print(message)
+        cprint(message,color=color,attrs=attrs)
 
     def __init__(self):
         with open(resource_path(self.__properties_file), mode='rt',
@@ -37,6 +40,8 @@ class PostgresObjInstaller:
         self.deploy_mode = self.DeployMode.SEPARATE_STATEMENTS.value
         self.log_table = data['db']['log_table']
         self.__dist_folder_name = None
+
+
 
     def __setattr__(self, key, value):
         if (key in self.__dict__ and value != '') or key not in self.__dict__:
@@ -79,30 +84,42 @@ class PostgresObjInstaller:
         def as_dict(self):
             return {k: v for k, v in self.__dict__.items() if not callable(v)}
 
+
     def clone_repo(self):
 
-        self.repo_properties.remote_path = input(
-            f'Enter remote repo path, default is: {self.repo_properties.remote_path}\n').strip()
-        self.repo_properties.local_path = input(
-            f'Enter the local path where repo will be cloned, default is: {self.repo_properties.local_path}\n').strip()
+        cprint(f'Enter the remote repo path, default is: {self.repo_properties.remote_path}', *self.__prompts_default)
+        self.repo_properties.remote_path = input().strip()
+
+        cprint(f'Remote repo path is set to {self.repo_properties.remote_path}', 'light_green')
+
+        cprint(f'Enter the local path where repo will be cloned, default is: {self.repo_properties.local_path}',*self.__prompts_default)
+        self.repo_properties.local_path = input().strip()
+
+        cprint(f'Local repo path is set to {self.repo_properties.local_path}', 'light_green')
 
         def remove_readonly(func, fpath, *args):
             chmod(fpath, S_IWRITE)
             func(fpath)
 
         try:
-            warn(f'Folder will be overwritten: {self.repo_properties.local_path}', category=RuntimeWarning,
-                 stacklevel=2)
+
+            cprint(f'Folder will be overwritten: {self.repo_properties.local_path}', 'red', attrs=['bold'])
             shutil.rmtree(self.repo_properties.local_path, onerror=remove_readonly)
         except FileNotFoundError:
             pass
 
+        cprint('Cloning repository...','yellow')
         self.repo = Repo.clone_from(self.repo_properties.remote_path, self.repo_properties.local_path)
+        cprint('Repository cloned successfully', 'light_green',attrs=['bold'])
 
     def switch_branch(self):
-        self.repo_properties.branch = input(
-            f'Enter a branch name or commit SHA-1, default branch is: {self.repo_properties.branch}\n').strip()
+
+        cprint(f'Enter a branch name or commit SHA-1, default branch is: {self.repo_properties.branch}', *self.__prompts_default)
+        self.repo_properties.branch = input().strip()
+        cprint(f'Branch/SHA-1 is set to {self.repo_properties.branch}', 'light_green')
+        cprint('Checking out...','yellow')
         self.repo.git.checkout(self.repo_properties.branch)
+        cprint('Checkout is successful', 'light_green')
         _format = '%Y-%d-%m %H.%M.%S'
         self.get_dist_folder_name = f'{self.get_branch()} {datetime.now().strftime(_format)}'
         makedirs(path.abspath(
@@ -111,15 +128,18 @@ class PostgresObjInstaller:
     def check_scripts(self, script_list: list[tuple]):
         for _, __, k in script_list:
             if not path.exists(_):
-                self.log_and_print(f'Specified script doesn\'t exist {__}')
-                self.log_and_print('Fill objects.inst file with correct script paths and try again')
+                self.log_and_print(f'Specified script doesn\'t exist {__}','red')
+                self.log_and_print('Fill objects.inst file with correct script paths and try again','red')
                 sys.exit()
         return script_list
 
     def check_folder_and_scripts(self):
-        self.repo_properties.folder = input(
-            f'Enter a subfolder name of Requests catalog(must contain objects.inst file)'
-            f', default folder is: {self.repo_properties.folder}\n').strip()
+
+        cprint(f'Enter a subfolder name of Requests catalog(must contain objects.inst file)'
+               f', default folder is: {self.repo_properties.folder}',*self.__prompts_default)
+        self.repo_properties.folder = input().strip()
+
+        cprint(f'Folder is set to {self.repo_properties.folder}', 'light_green')
 
         inst_path = path.abspath(
             fr'{self.repo_properties.local_path}/Requests/{self.repo_properties.folder}/objects.inst')
@@ -132,13 +152,16 @@ class PostgresObjInstaller:
                           for _ in f if not _.startswith('#')]
 
         self.script_list = self.check_scripts(file_paths)
-        self.log_and_print(f'List of deploy scripts created successfully')
+        self.log_and_print(f'List of deploy scripts created successfully','light_green')
 
     def copy_scripts_to_dist_path(self):
-        print('Copying scripts to dist path')
+        cprint('Copying scripts to dist path...','yellow')
         for a, l, d in self.script_list:
             makedirs(path.dirname(d), exist_ok=True)
             shutil.copy(a, d)
+        cprint('Scripts copied successfully', 'light_green')
+        cprint(fr'Deployment scripts location is {self.repo_properties.dist_path}\{self.get_dist_folder_name}',
+               'light_magenta')
 
     @staticmethod
     def read_sql(filepath):
@@ -147,15 +170,27 @@ class PostgresObjInstaller:
         return sql
 
     def check_connection(self):
-        self.db_properties.host = input(
-            f'Enter the host of the Postgresql cluster, default host is: {self.db_properties.host}\n')
-        self.db_properties.port = input(
-            f'Enter the port of the Postgresql cluster, default port is: {self.db_properties.port}\n')
-        self.db_properties.dbname = input(
-            f'Enter the database name, default database is: {self.db_properties.dbname}\n')
-        self.db_properties.user = input(
-            f'Enter the user name for db connection, default user is: {self.db_properties.user}\n')
-        self.db_properties.password = askpass(prompt=f'Enter the password for db connection\n')
+        cprint(f'Enter the host of the Postgresql cluster, default host is: {self.db_properties.host}',
+               *self.__prompts_default)
+        self.db_properties.host = input()
+        cprint(f'Host is set to {self.db_properties.host}', 'light_green')
+
+        cprint(f'Enter the port of the Postgresql cluster, default port is: {self.db_properties.port}',
+               *self.__prompts_default)
+        self.db_properties.port = input()
+        cprint(f'Port is set to {self.db_properties.port}', 'light_green')
+
+        cprint(f'Enter the database name, default database is: {self.db_properties.dbname}',
+               *self.__prompts_default)
+        self.db_properties.dbname = input()
+        cprint(f'Database name is set to {self.db_properties.dbname}', 'light_green')
+
+        cprint(f'Enter the user name for db connection, default user is: {self.db_properties.user}',
+               *self.__prompts_default)
+        self.db_properties.user = input()
+        cprint(f'User is set to {self.db_properties.user}', 'light_green')
+
+        self.db_properties.password = askpass(prompt=colored(f'Enter the password for db connection\n','blue'))
         connection = connect(**self.db_properties.as_dict())
         connection.set_session(autocommit=True)
 
@@ -164,7 +199,7 @@ class PostgresObjInstaller:
     def execute_script(self, sql, connection):
         with connection.cursor() as cc:
             cc.execute(sql)
-            self.log_and_print(cc.statusmessage)
+            self.log_and_print(cc.statusmessage,'magenta')
 
     class DeployMode(Enum):
         SEPARATE_STATEMENTS = 'separate'
@@ -190,11 +225,13 @@ class PostgresObjInstaller:
             self.__dist_folder_name = value
 
     def deploy_objects(self):
-        self.deploy_mode = input(
-            f'Execute scripts as single statement or separately (single/separate)? '
-            f'Default mode is: {self.deploy_mode}\n')
+        cprint(f'Execute scripts as single statement or separately (single/separate)? '
+               f'Default mode is: {self.deploy_mode}', color='cyan', attrs=['bold'])
+        self.deploy_mode = input().strip()
+        cprint(f'Deploy mode is set to {self.deploy_mode}', 'light_green')
+
         if self.deploy_mode not in (_.value for _ in self.DeployMode):
-            raise RuntimeError('Invalid deploy mode')
+            raise RuntimeError(colored('Invalid deploy mode','red',attrs=['bold']))
 
         connection = self.check_connection()
 
@@ -202,12 +239,12 @@ class PostgresObjInstaller:
 
             for _, __, k in self.script_list:
                 try:
-                    self.log_and_print(f'Executing script: {__}')
+                    self.log_and_print(f'Executing script: {__}','yellow')
                     self.execute_script(self.read_sql(k), connection)
                 except Exception as e:
                     self.execute_script(self.get_log_dml(False), connection)
-                    self.log_and_print(e)
-                    self.log_and_print('Got errors during deploy execution, further execution is stopped')
+                    self.log_and_print(e,'red')
+                    self.log_and_print('Got errors during deploy execution, further execution is stopped','red')
                     sys.exit()
             else:
                 self.execute_script(self.get_log_dml(True), connection)
@@ -229,17 +266,18 @@ class PostgresObjInstaller:
 
                 f1.write(st)
             try:
-                self.log_and_print(f'Executing script: {fpath}')
+                self.log_and_print(f'Executing script: {fpath}','yellow')
                 self.execute_script(self.read_sql(fpath), connection)
                 self.execute_script(self.get_log_dml(True), connection)
             except Exception as e:
                 self.execute_script(self.get_log_dml(False), connection)
-                self.log_and_print(e)
-                self.log_and_print('Got errors during deploy execution, further execution is stopped')
+                self.log_and_print(e,'red')
+                self.log_and_print('Got errors during deploy execution, further execution is stopped','red')
                 sys.exit()
 
 
 if __name__ == '__main__':
+    just_fix_windows_console()
     try:
         pg_builder = PostgresObjInstaller()
         pg_builder.clone_repo()
@@ -248,10 +286,10 @@ if __name__ == '__main__':
         pg_builder.copy_scripts_to_dist_path()
         pg_builder.deploy_objects()
     except Exception:
-        print(sys.exc_info()[0])
+        print(colored(sys.exc_info()[0],'red'))
         from traceback import format_exc
 
-        print(format_exc())
+        print(colored(format_exc(),'red'))
     finally:
-        print('Press Enter to close the window')
+        cprint('Press Enter to close the window','light_red')
         input()
