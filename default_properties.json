@@ -9,7 +9,7 @@
       "env": "userprofile",
       "path": "/Desktop/my_proj/dist"
     },
-    "branch": "master",
+    "release_branch": "master",
     "folder": "init"
   },
   "db": {

@@ -33,7 +33,7 @@ Default properties for the app are represented in the default_properties.json fi
       "env": "userprofile",
       "path": "/Desktop/my_proj/dist"
     },
-    "branch": "master",
+    "release_branch": "master",
     "folder": "init"
   },
   "db": {
@@ -52,15 +52,20 @@ Key *repo* represents git repository properties needed for cloning and composing
  - *remote_path* - url of your Postgresql repo
  - *local_path* - path whither repo should be cloned, *env* - environment variable(set null if not needed), *path* - path to destination folder
  - *dist_path* - distributive path with scripts for deploying and logs
- - *branch* - branch name or commit SHA-1
+ - *release_branch* - release branch name or commit SHA-1
  - *folder* - name of the subfolder of Requests catalog
 
 Key *db* represents database connection properties and name of the logging table. The table must be present in your database(or be in ur objects.inst file, if you're using app first time) and have structure like [here](https://github.com/GTChimp/pg_dummydb/blob/master/OBJ/Schemas/main/Tables/log_ci_results.sql)
-
+# Revert changes feature
+At prompts time you will be able to select deploy type. First option is "release"(default), the second is "revert".
+Second option allows you to revert chosen db objects state to specific SHA-1/branch.
+In order this feature to work, your release branch must have "objects.revert" file in the subfolder of "Requests" catalog.
+It works as follows: scripts from list which are located on "Requests" path will be copied from "release" branch, while 
+scripts from "OBJ" path will be copied from "revert" branch. Thus, you need to specify all paths correctly to make this work properly.
 # Misc options
 #### List of additinal options
 
- - at propmpts time here is a possibility to chose deploy mode, i.e. deploy all your .sql scripts as single statement  or separately. The default is separate mode. In order for the "one statement" mode to function correctly, your DDLs and PL/pgSQL statements must have tagged dollar quoting.
+ - at prompts time here is a possibility to chose deploy mode, i.e. deploy all your .sql scripts as single statement  or separately. The default is separate mode. In order for the "one statement" mode to function correctly, your DDLs and PL/pgSQL statements must have tagged dollar quoting.
 
 # Notes
 
