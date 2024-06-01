@@ -306,8 +306,9 @@ class PostgresObjInstaller:
         else:  # self.deploy_type==self.DeployType.REVERT.value:
             branch = repr(f'{self.__release_branch} to {self.__revert_branch}')
 
-        return f'insert into {self.log_table}(branch, deploy_mode, is_successful, deploy_type) ' \
-               f'values({branch}, {repr(self.deploy_mode)}, {is_successful}, {repr(self.deploy_type)})'
+        return f'insert into {self.log_table}(branch, deploy_mode, is_successful, deploy_type, requests_folder) ' \
+               f'values({branch}, {repr(self.deploy_mode)}, {is_successful}' \
+               f', {repr(self.deploy_type)}, {repr(self.repo_properties.folder)})'
 
     @property
     def get_dist_folder_name(self):
