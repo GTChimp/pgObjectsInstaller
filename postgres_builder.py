@@ -228,7 +228,6 @@ class PostgresObjInstaller:
                 cprint(fr'Deployment scripts location is {self.repo_properties.dist_path}\{self.get_dist_folder_name}',
                        'light_magenta')
 
-
         elif revert_stage == self.RevertStage.ONE.value:
             b = 0
             for i, t in enumerate(_ for _ in self.script_list if _.content_fpath.startswith('Requests')):
