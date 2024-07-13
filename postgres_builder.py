@@ -162,7 +162,7 @@ class PostgresObjInstaller:
         cprint(f'Enter a release branch name or commit SHA-1, default branch is: {self.repo_properties.release_branch}',
                *self.__prompts_default)
         self.repo_properties.release_branch = input().strip()
-        cprint(f'Release ranch/SHA-1 is set to {self.repo_properties.release_branch}', 'light_green')
+        cprint(f'Release branch/SHA-1 is set to {self.repo_properties.release_branch}', 'light_green')
         cprint('Checking out...', 'yellow')
         self.repo.git.checkout(self.repo_properties.release_branch)
         cprint('Checkout is successful', 'light_green')
@@ -285,7 +285,7 @@ class PostgresObjInstaller:
     def execute_script(self, sql, connection):
         with connection.cursor() as cc:
             cc.execute(sql)
-            self.log_and_print(cc.statusmessage, 'magenta')
+            self.log_and_print('Success', 'magenta')
 
     class DeployMode(Enum):
         SEPARATE_STATEMENTS = 'separate'
