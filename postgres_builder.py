@@ -15,7 +15,7 @@ from datetime import datetime
 from termcolor import colored, cprint
 from colorama import just_fix_windows_console
 from collections import namedtuple
-
+from sshtunnel import SSHTunnelForwarder
 
 class PostgresObjInstaller:
     __properties_file = r'default_properties.json'
@@ -277,6 +277,17 @@ class PostgresObjInstaller:
         cprint(f'User is set to {self.db_properties.user}', 'light_green')
 
         self.db_properties.password = askpass(prompt=colored(f'Enter the password for db connection\n', 'blue'))
+
+        forwarder = SSHTunnelForwarder(
+            ('127.0.0.1', 2222),
+            # ssh_private_key="</path/to/private/ssh/key>",
+            ### in my case, I used a password instead of a private key
+            ssh_username='******',
+            ssh_password='******',
+            remote_bind_address=('localhost', 5432))
+        forwarder.start()
+        self.db_properties.port=forwarder.local_bind_port
+
         connection = connect(**self.db_properties.as_dict())
         connection.set_session(autocommit=True)
 
