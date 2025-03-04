@@ -5,12 +5,10 @@ pgObjectsInstaller is a deployment automation tool for Postgresql database objec
 
 # Installation/Build
 
-The source code is written on Python version 3.11 but also some previous versions can be viable.
-To build a win exe all you need is download/clone source, install the requirements and run something like 
-```
-pyinstaller postgres_builder.py --distpath '%userprofile%/Desktop/atata' --clean --workpath '%userprofile%/Desktop/atata/build' --add-data "configs:configs" --add-data "misc:misc"
-```
-in any command line tool(the PyInstaller lib is used)
+The source code is written on Python version 3.11 but also some previous versions can be viable.  
+The git redistributable is need to be installed for this version to work.  
+To run app you need to download/clone source, install the requirements and run *postgres_builder.bat*  
+Don't forget to add python folder to the "Path" environment variable!
 
 # Quick start
 
