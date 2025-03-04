@@ -18,7 +18,7 @@ from collections import namedtuple
 
 
 class PropertiesValidator:
-    __properties_dir = r'configs'
+    __properties_dir = resource_path(r'configs')
     __default_structure = {
         'repo': {
             'remote_path': str,
