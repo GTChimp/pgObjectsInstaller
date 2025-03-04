@@ -1,4 +1,4 @@
-from os import getenv, path, chmod, environ, makedirs
+from os import getenv, path, chmod, environ, makedirs, listdir
 from poi_lib import resource_path
 
 environ['GIT_PYTHON_GIT_EXECUTABLE'] = path.abspath(resource_path(r'misc/PortableGit-2.45.0-64-bit/bin/git.exe'))
@@ -7,7 +7,7 @@ from git import Repo
 import shutil
 from stat import S_IWRITE
 from psycopg2 import connect
-from json import load
+import json
 from enum import Enum
 import sys
 from maskpass import askpass
@@ -17,13 +17,123 @@ from colorama import just_fix_windows_console
 from collections import namedtuple
 
 
+class PropertiesValidator:
+    __properties_dir = r'configs'
+    __default_structure = {
+        'repo': {
+            'remote_path': str,
+            'local_path': {'env': (str, type(None)), 'path': str},
+            'dist_path': {'env': (str, type(None)), 'path': str},
+            'release_branch': str,
+            'folder': str
+        },
+        'db': {
+            'connection': {
+                'host': str,
+                'port': int,
+                'dbname': str,
+                'user': str
+            },
+            'log_table': str
+        }
+    }
+
+    def __init__(self):
+        self._valid_configs = []
+        self._invalid_configs = []
+        self._selected_config = None
+
+    @property
+    def valid_configs(self):
+        return '\n'.join(self._valid_configs)
+
+    @property
+    def invalid_configs(self):
+        return '\n'.join(self._invalid_configs)
+
+    def validate_properties(self):
+        if not path.exists(self.__properties_dir):
+            raise FileNotFoundError(f'Folder {self.__properties_dir} not found.')
+
+        for filename in sorted(listdir(self.__properties_dir)):
+            if filename.endswith('.json'):
+                file_path = path.join(self.__properties_dir, filename)
+                if self._is_valid_property(file_path):
+                    self._valid_configs.append(filename)
+                else:
+                    self._invalid_configs.append(filename)
+        print(colored(f'Invalid config files:\n{self.invalid_configs}', 'red', attrs=['bold']))
+        print(colored(f'Valid config files:\n{self.valid_configs}', 'light_green', attrs=['bold']))
+
+        if self._valid_configs:
+            self._selected_config = self._valid_configs[0]
+            cprint(f'Default config file is: {self._selected_config}', color='cyan')
+            return self._prompt_user_selection()
+        raise FileNotFoundError('No valid configuration files found.')
+
+    @staticmethod
+    def load_config(file_path):
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return data
+
+    def _is_valid_property(self, file_path):
+        try:
+            data = self.load_config(file_path)
+            return self._validate_structure(data, self.__default_structure)
+        except (json.JSONDecodeError, IOError):
+            return False
+
+    def _validate_structure(self, data, structure):
+        if not isinstance(data, dict):
+            return False
+        for key, expected_type in structure.items():
+            if key not in data:
+                return False
+            if isinstance(expected_type, dict):
+                if not self._validate_structure(data[key], expected_type):
+                    return False
+            elif not isinstance(data[key], expected_type):
+                return False
+        return True
+
+    def _prompt_user_selection(self):
+        cprint('Enter the configuration file name (or press Enter to use the default): ', 'cyan')
+        user_choice = input().strip()
+        if user_choice and user_choice in self._valid_configs:
+            self._selected_config = user_choice
+            cprint(f'Selected file: {self._selected_config}', 'light_green')
+        else:
+            cprint(f'Using default file: {self._selected_config}', 'light_green')
+
+        _config = self.load_config(fr'{self.__properties_dir}\{self._selected_config}')
+        return _config
+
+
 class PostgresObjInstaller:
-    __properties_file = r'default_properties.json'
     __log_file = r'install.log'
     __prompts_default = ['cyan', None, ['bold']]
     __encoding = r'UTF-8'
     __inst_file = r'objects.inst'
     __revert_file = r'objects.revert'
+
+    def __init__(self, properties: dict):
+
+        self.repo_properties = self.RepositoryProperties(properties['repo'])
+        self.db_properties = self.PGConnectionProperties(properties['db']['connection'])
+        self.repo_properties.revert_branch = None
+        self.repo = None
+        self.script_list = None
+        self.deploy_mode = self.DeployMode.SEPARATE_STATEMENTS.value
+        self.deploy_type = self.DeployType.RELEASE.value
+        self.log_table = properties['db']['log_table']
+        self.__dist_folder_name = None
+        self.__release_branch = None
+        self.__revert_branch = None
+
+    def __setattr__(self, key, value):
+        if (key in self.__dict__ and value != '') or key not in self.__dict__:
+            object.__setattr__(self, key, value)
 
     def __deploy_type_file_map(self, deploy_type):
         if deploy_type == self.DeployType.RELEASE.value:
@@ -36,33 +146,14 @@ class PostgresObjInstaller:
         RELEASE = 'release'
         REVERT = 'revert'
 
-    def log_and_print(self, message, color, attrs=None):
-        with open(f'{self.repo_properties.dist_path}/{self.__dist_folder_name}/{self.__log_file}', mode='a',
-                  encoding=self.__encoding) as f:
-            f.write(f'{datetime.now()}: {message}\n')
+    class RevertStage(Enum):
+        ZERO = 0
+        ONE = 1
+        TWO = 2
 
-        cprint(message, color=color, attrs=attrs)
-
-    def __init__(self):
-        with open(resource_path(self.__properties_file), mode='rt',
-                  encoding=self.__encoding) as f:
-            data = load(f)
-
-        self.repo_properties = self.RepositoryProperties(data['repo'])
-        self.db_properties = self.PGConnectionProperties(data['db']['connection'])
-        self.repo_properties.revert_branch = None
-        self.repo = None
-        self.script_list = None
-        self.deploy_mode = self.DeployMode.SEPARATE_STATEMENTS.value
-        self.deploy_type = self.DeployType.RELEASE.value
-        self.log_table = data['db']['log_table']
-        self.__dist_folder_name = None
-        self.__release_branch = None
-        self.__revert_branch = None
-
-    def __setattr__(self, key, value):
-        if (key in self.__dict__ and value != '') or key not in self.__dict__:
-            object.__setattr__(self, key, value)
+    class DeployMode(Enum):
+        SEPARATE_STATEMENTS = 'separate'
+        SINGLE_STATEMENT = 'single'
 
     class RepositoryProperties:
         def __init__(self, properties_dict):
@@ -100,6 +191,13 @@ class PostgresObjInstaller:
 
         def as_dict(self):
             return {k: v for k, v in self.__dict__.items() if not callable(v)}
+
+    def log_and_print(self, message, color, attrs=None):
+        with open(f'{self.repo_properties.dist_path}/{self.__dist_folder_name}/{self.__log_file}', mode='a',
+                  encoding=self.__encoding) as f:
+            f.write(f'{datetime.now()}: {message}\n')
+
+        cprint(message, color=color, attrs=attrs)
 
     def clone_repo(self):
 
@@ -211,11 +309,6 @@ class PostgresObjInstaller:
         self.script_list = self.check_scripts(file_paths)
         self.log_and_print(f'List of deploy scripts created successfully', 'light_green')
 
-    class RevertStage(Enum):
-        ZERO = 0
-        ONE = 1
-        TWO = 2
-
     def copy_scripts_to_dist_path(self, revert_stage=RevertStage.ZERO.value):
 
         if revert_stage == self.RevertStage.ZERO.value:
@@ -239,7 +332,7 @@ class PostgresObjInstaller:
             else:
                 if b > 0:
                     cprint('First stage scripts copied successfully', 'light_green')
-        else:  # revert_stage==self.RevertStage.TWO.valuen
+        else:  # revert_stage==self.RevertStage.TWO.value
             for i, t in enumerate(_ for _ in self.script_list if _.content_fpath.startswith('OBJ')):
                 if i == 0:
                     cprint('Copying second stage scripts to dist path...', 'yellow')
@@ -286,10 +379,6 @@ class PostgresObjInstaller:
         with connection.cursor() as cc:
             cc.execute(sql)
             self.log_and_print('Success', 'magenta')
-
-    class DeployMode(Enum):
-        SEPARATE_STATEMENTS = 'separate'
-        SINGLE_STATEMENT = 'single'
 
     def get_branch(self):
         try:
@@ -378,7 +467,9 @@ class PostgresObjInstaller:
 if __name__ == '__main__':
     just_fix_windows_console()
     try:
-        pg_builder = PostgresObjInstaller()
+        validator = PropertiesValidator()
+        config = validator.validate_properties()
+        pg_builder = PostgresObjInstaller(config)
         pg_builder.clone_repo()
         pg_builder.handle_deploy_path()
         pg_builder.deploy_objects()

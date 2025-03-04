@@ -18,9 +18,11 @@ The default version of the app requires that your Postgresql repository has stru
 Also, the general recommendation is that the user/role used for the deployment was an owner of the database.
 
 
-# Default properties
+# Configs
 
-Default properties for the app are represented in the default_properties.json file.
+Config files for the app should be located in the *configs* folder.  
+All files which are located there will be validated, and you will be able to choose proper cfg.  
+Valid configs should have *.json* extension and have the following structure:
 ```
 {
   "repo": {
@@ -47,6 +49,7 @@ Default properties for the app are represented in the default_properties.json fi
   }
 }
 ```
+
 Key *repo* represents git repository properties needed for cloning and composing objects to deploy.
 
  - *remote_path* - url of your Postgresql repo
