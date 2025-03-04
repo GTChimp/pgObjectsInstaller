@@ -1,8 +1,6 @@
-from os import getenv, path, chmod, environ, makedirs, listdir
 from poi_lib import resource_path
 
-environ['GIT_PYTHON_GIT_EXECUTABLE'] = path.abspath(resource_path(r'misc/PortableGit-2.45.0-64-bit/bin/git.exe'))
-
+from os import getenv, path, chmod, makedirs, listdir
 from git import Repo
 import shutil
 from stat import S_IWRITE
