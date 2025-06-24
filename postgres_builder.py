@@ -1,5 +1,6 @@
 from os import getenv, path, chmod, environ, makedirs, listdir
 from poi_lib import resource_path
+from dataclasses import dataclass
 
 environ['GIT_PYTHON_GIT_EXECUTABLE'] = path.abspath(resource_path(r'misc/PortableGit-2.45.0-64-bit/bin/git.exe'))
 
@@ -35,7 +36,8 @@ class PropertiesValidator:
                 'user': str
             },
             'log_table': str
-        }
+        },
+        'misc': {'deploy_mode': str}
     }
 
     def __init__(self):
@@ -116,6 +118,7 @@ class PostgresObjInstaller:
     __encoding = r'UTF-8'
     __inst_file = r'objects.inst'
     __revert_file = r'objects.revert'
+    __single_transaction_filename = r'cur_install.sql'
 
     def __init__(self, properties: dict):
 
@@ -124,7 +127,7 @@ class PostgresObjInstaller:
         self.repo_properties.revert_branch = None
         self.repo = None
         self.script_list = None
-        self.deploy_mode = self.DeployMode.SEPARATE_STATEMENTS.value
+        self.deploy_mode = self.DeployMode(properties['misc']['deploy_mode']).value
         self.deploy_type = self.DeployType.RELEASE.value
         self.log_table = properties['db']['log_table']
         self.__dist_folder_name = None
@@ -155,7 +158,15 @@ class PostgresObjInstaller:
         SEPARATE_STATEMENTS = 'separate'
         SINGLE_STATEMENT = 'single'
 
+    @dataclass
     class RepositoryProperties:
+
+        remote_path: str
+        local_path: str
+        dist_path: str
+        release_branch: str
+        folder: str
+
         def __init__(self, properties_dict):
             for k, v in properties_dict.items():
                 self.__setattr__(k, v)
@@ -226,15 +237,13 @@ class PostgresObjInstaller:
         cprint('Cloning repository...', 'yellow')
         self.repo = Repo.clone_from(self.repo_properties.remote_path, self.repo_properties.local_path)
         cprint('Repository cloned successfully', 'light_green', attrs=['bold'])
+        return self
 
     def handle_deploy_path(self):
         cprint(f'Select deploy type (release/revert) '
                f'Default type is: {self.deploy_type}', color='cyan', attrs=['bold'])
         self.deploy_type = input().strip()
-        cprint(f'Deploy type is set to {self.deploy_type}', 'light_green')
-
-        if self.deploy_type not in (_.value for _ in self.DeployType):
-            raise RuntimeError(colored('Invalid deploy type', 'red', attrs=['bold']))
+        cprint(f'Deploy type is set to {self.DeployType(self.deploy_type).value}', 'light_green')
 
         if self.deploy_type == self.DeployType.RELEASE.value:
             self.switch_to_release_branch()
@@ -248,12 +257,13 @@ class PostgresObjInstaller:
             self.copy_scripts_to_dist_path(self.RevertStage.ONE.value)
             self.switch_to_revert_branch()
             self.copy_scripts_to_dist_path(self.RevertStage.TWO.value)
+        return self
 
     def create_dist_folder(self):
         _format = '%Y-%d-%m %H.%M.%S'
-        self.get_dist_folder_name = f'{self.deploy_type} {self.get_branch()} {datetime.now().strftime(_format)}'
+        self.dist_folder_name = f'{self.deploy_type} {self.get_branch()} {datetime.now().strftime(_format)}'
         makedirs(path.abspath(
-            fr'{self.repo_properties.dist_path}/{self.get_dist_folder_name}'))
+            fr'{self.repo_properties.dist_path}/{self.dist_folder_name}'))
 
     def switch_to_release_branch(self):
 
@@ -277,10 +287,12 @@ class PostgresObjInstaller:
         cprint('Checkout is successful', 'light_green')
         self.__revert_branch = self.get_branch()
 
-    def check_scripts(self, script_list: list[tuple]):
-        for _, __, k in script_list:
-            if not path.exists(_):
-                self.log_and_print(f'Specified script doesn\'t exist {__}', 'red')
+    Script = namedtuple('Script', ['repo_fpath', 'content_fpath', 'dist_fpath'])
+
+    def check_scripts(self, script_list: list['Script']):
+        for script in script_list:
+            if not path.exists(script.repo_fpath):
+                self.log_and_print(f'Specified script doesn\'t exist {script.content_fpath}', 'red')
                 self.log_and_print('Fill objects.inst file with correct script paths and try again', 'red')
                 sys.exit()
         return script_list
@@ -297,14 +309,12 @@ class PostgresObjInstaller:
         inst_path = path.abspath(
             fr'{self.repo_properties.local_path}/Requests/{self.repo_properties.folder}/{self.__deploy_type_file_map(self.deploy_type)}')
 
-        Script = namedtuple('Script', ['repo_fpath', 'content_fpath', 'dist_fpath'])
-
         with open(inst_path, mode='rt', encoding=self.__encoding) as f:
-            file_paths = [Script(path.abspath(fr'{self.repo_properties.local_path}/{_.rstrip()}')
-                                 , _.rstrip()
-                                 , path.abspath(
-                    fr'{self.repo_properties.dist_path}/{self.get_dist_folder_name}/{_.rstrip()}'))
-                          for _ in f if not _.startswith('#')]
+            file_paths = [self.Script(path.abspath(fr'{self.repo_properties.local_path}/{line.rstrip()}')
+                                      , line.rstrip()
+                                      , path.abspath(
+                    fr'{self.repo_properties.dist_path}/{self.dist_folder_name}/{line.rstrip()}'))
+                          for line in f if not line.startswith('#')]
 
         self.script_list = self.check_scripts(file_paths)
         self.log_and_print(f'List of deploy scripts created successfully', 'light_green')
@@ -313,34 +323,34 @@ class PostgresObjInstaller:
 
         if revert_stage == self.RevertStage.ZERO.value:
             cprint('Copying scripts to dist path...', 'yellow')
-            for a, l, d in self.script_list:
-                makedirs(path.dirname(d), exist_ok=True)
-                shutil.copy(a, d)
+            for script in self.script_list:
+                makedirs(path.dirname(script.dist_fpath), exist_ok=True)
+                shutil.copy(script.repo_fpath, script.dist_fpath)
             else:
                 cprint('Scripts copied successfully', 'light_green')
-                cprint(fr'Deployment scripts location is {self.repo_properties.dist_path}\{self.get_dist_folder_name}',
+                cprint(fr'Deployment scripts location is {self.repo_properties.dist_path}\{self.dist_folder_name}',
                        'light_magenta')
 
         elif revert_stage == self.RevertStage.ONE.value:
-            b = 0
-            for i, t in enumerate(_ for _ in self.script_list if _.content_fpath.startswith('Requests')):
+            stage_flag = False
+            for i, script in enumerate(s for s in self.script_list if s.content_fpath.startswith('Requests')):
                 if i == 0:
                     cprint('Copying first stage scripts to dist path...', 'yellow')
-                makedirs(path.dirname(t.dist_fpath), exist_ok=True)
-                shutil.copy(t.repo_fpath, t.dist_fpath)
-                b += 1
+                    stage_flag = True
+                makedirs(path.dirname(script.dist_fpath), exist_ok=True)
+                shutil.copy(script.repo_fpath, script.dist_fpath)
             else:
-                if b > 0:
+                if stage_flag:
                     cprint('First stage scripts copied successfully', 'light_green')
         else:  # revert_stage==self.RevertStage.TWO.value
-            for i, t in enumerate(_ for _ in self.script_list if _.content_fpath.startswith('OBJ')):
+            for i, script in enumerate(s for s in self.script_list if s.content_fpath.startswith('OBJ')):
                 if i == 0:
                     cprint('Copying second stage scripts to dist path...', 'yellow')
-                makedirs(path.dirname(t.dist_fpath), exist_ok=True)
-                shutil.copy(t.repo_fpath, t.dist_fpath)
+                makedirs(path.dirname(script.dist_fpath), exist_ok=True)
+                shutil.copy(script.repo_fpath, script.dist_fpath)
             else:
                 cprint('Scripts copied successfully', 'light_green')
-                cprint(fr'Deployment scripts location is {self.repo_properties.dist_path}\{self.get_dist_folder_name}',
+                cprint(fr'Deployment scripts location is {self.repo_properties.dist_path}\{self.dist_folder_name}',
                        'light_magenta')
 
     def read_sql(self, filepath):
@@ -384,7 +394,7 @@ class PostgresObjInstaller:
         try:
             return f'{self.repo.active_branch} {self.repo.head.commit}'
         except TypeError:
-            return self.repo.head.commit
+            return f'{self.repo.head.commit}'
 
     def get_log_dml(self, is_successful):
 
@@ -399,14 +409,34 @@ class PostgresObjInstaller:
                f', {repr(self.deploy_type)}, {repr(self.repo_properties.folder)})'
 
     @property
-    def get_dist_folder_name(self):
+    def dist_folder_name(self):
 
         return self.__dist_folder_name
 
-    @get_dist_folder_name.setter
-    def get_dist_folder_name(self, value):
+    @dist_folder_name.setter
+    def dist_folder_name(self, value):
         if self.__dist_folder_name is None:
             self.__dist_folder_name = value
+
+    def create_single_inst_file(self) -> str | None:
+        if self.deploy_mode == self.DeployMode.SINGLE_STATEMENT.value:
+            fpath = path.abspath(f'{self.repo_properties.dist_path}'
+                                 f'/{self.dist_folder_name}'
+                                 f'/{self.__single_transaction_filename}')
+
+            with open(fpath, mode='wt', encoding=self.__encoding) as f1:
+                with open(resource_path(r'misc/start_single_statement.txt'), mode='rt', encoding=self.__encoding) as f2:
+                    st = f2.read()
+                f1.write(st)
+
+                for script in self.script_list:
+                    f1.write(f'{self.read_sql(script.repo_fpath)}\n\n')
+
+                with open(resource_path(r'misc/end_single_statement.txt'), mode='rt', encoding=self.__encoding) as f2:
+                    st = f2.read()
+
+                f1.write(st)
+            return fpath
 
     def deploy_objects(self):
         cprint(f'Execute scripts as single statement or separately (single/separate)? '
@@ -417,40 +447,12 @@ class PostgresObjInstaller:
         if self.deploy_mode not in (_.value for _ in self.DeployMode):
             raise RuntimeError(colored('Invalid deploy mode', 'red', attrs=['bold']))
 
+        fpath = self.create_single_inst_file()
+
         connection = self.check_connection()
 
-        if self.deploy_mode == self.DeployMode.SEPARATE_STATEMENTS.value:
+        if self.deploy_mode == self.DeployMode.SINGLE_STATEMENT.value:
 
-            for _, __, k in self.script_list:
-                try:
-                    self.log_and_print(f'Executing script: {__}', 'yellow')
-                    self.execute_script(self.read_sql(k), connection)
-                except Exception as e:
-                    cprint(f'Logging ci info...', 'yellow')
-                    self.execute_script(self.get_log_dml(False), connection)
-                    self.log_and_print(e, 'red')
-                    self.log_and_print('Got errors during deploy execution, further execution is stopped', 'red')
-                    sys.exit()
-            else:
-                cprint(f'Logging ci info...', 'yellow')
-                self.execute_script(self.get_log_dml(True), connection)
-
-        else:
-            fname = r'cur_install.sql'
-            fpath = path.abspath(f'{self.repo_properties.dist_path}/{self.get_dist_folder_name}/{fname}')
-
-            with open(fpath, mode='wt', encoding=self.__encoding) as f1:
-                with open(resource_path(r'misc/start_single_statement.txt'), mode='rt', encoding=self.__encoding) as f2:
-                    st = f2.read()
-                f1.write(st)
-
-                for _, __, k in self.script_list:
-                    f1.write(f'{self.read_sql(k)}\n\n')
-
-                with open(resource_path(r'misc/end_single_statement.txt'), mode='rt', encoding=self.__encoding) as f2:
-                    st = f2.read()
-
-                f1.write(st)
             try:
                 self.log_and_print(f'Executing script: {fpath}', 'yellow')
                 self.execute_script(self.read_sql(fpath), connection)
@@ -463,17 +465,33 @@ class PostgresObjInstaller:
                 self.log_and_print('Got errors during deploy execution, further execution is stopped', 'red')
                 sys.exit()
 
+        else:
+            for script in self.script_list:
+                try:
+                    self.log_and_print(f'Executing script: {script.content_fpath}', 'yellow')
+                    self.execute_script(self.read_sql(script.dist_fpath), connection)
+                except Exception as e:
+                    cprint(f'Logging ci info...', 'yellow')
+                    self.execute_script(self.get_log_dml(False), connection)
+                    self.log_and_print(e, 'red')
+                    self.log_and_print('Got errors during deploy execution, further execution is stopped', 'red')
+                    sys.exit()
+            else:
+                cprint(f'Logging ci info...', 'yellow')
+                self.execute_script(self.get_log_dml(True), connection)
+
 
 if __name__ == '__main__':
     just_fix_windows_console()
     try:
         validator = PropertiesValidator()
         config = validator.validate_properties()
+
         pg_builder = PostgresObjInstaller(config)
-        pg_builder.clone_repo()
-        pg_builder.handle_deploy_path()
-        pg_builder.deploy_objects()
-    except Exception:
+        pg_builder.clone_repo() \
+            .handle_deploy_path() \
+            .deploy_objects()
+    except:
         print(colored(sys.exc_info()[0], 'red'))
         from traceback import format_exc
 

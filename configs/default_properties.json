@@ -20,5 +20,8 @@
       "user": "tester"
     },
     "log_table": "main.log_ci_results"
+  },
+  "misc": {
+    "deploy_mode": "single"
   }
 }

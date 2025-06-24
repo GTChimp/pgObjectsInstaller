@@ -6,11 +6,12 @@ pgObjectsInstaller is a deployment automation tool for Postgresql database objec
 # Installation/Build
 
 The source code is written on Python version 3.11 but also some previous versions can be viable.
-To build a win exe all you need is download/clone source, install the requirements and run something like 
+To build a win exe all you need is download/clone source, install the requirements ```pip install -r requirements.txt```  
+and run something like 
 ```
 pyinstaller postgres_builder.py --distpath '%userprofile%/Desktop/atata' --clean --workpath '%userprofile%/Desktop/atata/build' --add-data "configs:configs" --add-data "misc:misc"
 ```
-in any command line tool(the PyInstaller lib is used)
+works with Win PowerShell but with other CLI could be viable(care for special characters)
 
 # Quick start
 
@@ -46,6 +47,9 @@ Valid configs should have *.json* extension and have the following structure:
       "user": "tester"
     },
     "log_table": "main.log_ci_results"
+  },
+  "misc": {
+    "deploy_mode": "single"
   }
 }
 ```
@@ -68,7 +72,7 @@ scripts from "OBJ" path will be copied from "revert" branch. Thus, you need to s
 # Misc options
 #### List of additinal options
 
- - at prompts time here is a possibility to chose deploy mode, i.e. deploy all your .sql scripts as single statement  or separately. The default is separate mode. In order for the "one statement" mode to function correctly, your DDLs and PL/pgSQL statements must have tagged dollar quoting.
+ - at prompts time here is a possibility to chose deploy mode, i.e. deploy all your .sql scripts as single statement  or separately. The default is separate mode. In order for the "one statement" mode to function correctly, your DDLs and PL/pgSQL statements must have tagged dollar quoting. UPD: available in cfg for now
 
 # Notes
 
