@@ -7,7 +7,7 @@ environ['GIT_PYTHON_GIT_EXECUTABLE'] = path.abspath(resource_path(r'misc/Portabl
 from git import Repo
 import shutil
 from stat import S_IWRITE
-from psycopg2 import connect
+from psycopg2 import connect, sql
 import json
 from enum import Enum
 import sys
@@ -385,16 +385,41 @@ class PostgresObjInstaller:
 
         return connection
 
-    def execute_script(self, sql, connection):
-        with connection.cursor() as cc:
-            cc.execute(sql)
-            self.log_and_print('Success', 'magenta')
+    def execute_script(self, sql_query, connection, *args):
+        with connection.cursor() as cur:
+            if args:
+                cur.execute(sql_query, args)
+                res = cur.fetchone()
+                return res
+            else:
+                cur.execute(sql_query)
+                self.log_and_print('Success', 'magenta')
 
     def get_branch(self):
         try:
             return f'{self.repo.active_branch} {self.repo.head.commit}'
         except TypeError:
             return f'{self.repo.head.commit}'
+
+    @property
+    def _commit(self):
+        return f'{self.repo.head.commit}'
+
+    @property
+    def _last_hash_query(self):
+        schema, table = self.log_table.split('.')
+
+        query = sql.SQL('''SELECT {field}
+                        FROM {schema}.{table}
+                        WHERE created=(select max(created) FROM {schema}.{table} )
+                        AND deploy_type = %s 
+                        AND is_successful'''
+                        ).format(
+            field=sql.Identifier('branch'),
+            schema=sql.Identifier(schema),
+            table=sql.Identifier(table)
+        )
+        return query
 
     def get_log_dml(self, is_successful):
 
@@ -451,6 +476,18 @@ class PostgresObjInstaller:
 
         connection = self.check_connection()
 
+        last_hash = self.execute_script(self._last_hash_query, connection, self.DeployType.RELEASE.value)
+
+        if last_hash:
+            last_hash = last_hash[0].split()[-1]
+
+            if last_hash == self._commit:
+                cprint(f'Commit {last_hash} is already installed last, do you want to proceed anyway?(y/n)'
+                       , color='yellow', attrs=['bold'])
+                answer = input().strip().lower()
+                if answer == 'n':
+                    sys.exit()
+
         if self.deploy_mode == self.DeployMode.SINGLE_STATEMENT.value:
 
             try:
@@ -491,7 +528,7 @@ if __name__ == '__main__':
         pg_builder.clone_repo() \
             .handle_deploy_path() \
             .deploy_objects()
-    except:
+    except Exception:
         print(colored(sys.exc_info()[0], 'red'))
         from traceback import format_exc
 
