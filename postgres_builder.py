@@ -7,7 +7,7 @@ environ['GIT_PYTHON_GIT_EXECUTABLE'] = path.abspath(resource_path(r'misc/Portabl
 from git import Repo
 import shutil
 from stat import S_IWRITE
-from psycopg2 import connect, sql
+from psycopg2 import connect, sql, errors
 import json
 from enum import Enum
 import sys
@@ -476,7 +476,10 @@ class PostgresObjInstaller:
 
         connection = self.check_connection()
 
-        last_hash = self.execute_script(self._last_hash_query, connection, self.DeployType.RELEASE.value)
+        try:
+            last_hash = self.execute_script(self._last_hash_query, connection, self.DeployType.RELEASE.value)
+        except errors.UndefinedTable:
+            last_hash = None
 
         if last_hash:
             last_hash = last_hash[0].split()[-1]
