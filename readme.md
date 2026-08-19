@@ -5,24 +5,24 @@ pgObjectsInstaller is a deployment automation tool for Postgresql database objec
 
 # Installation/Build
 
-The source code is written on Python version 3.11 but also some previous versions can be viable.
+The source code is written on Python version 3.11, but also some previous versions can be viable.
 To build a win exe all you need is download/clone source, install the requirements ```pip install -r requirements.txt```  
 and run something like 
 ```
-pyinstaller postgres_builder.py --distpath '%userprofile%/Desktop/atata' --clean --workpath '%userprofile%/Desktop/atata/build' --add-data "configs:configs" --add-data "misc:misc"
+pyinstaller main.py --distpath '%userprofile%/Desktop/atata' --clean --workpath '%userprofile%/Desktop/atata/build' --add-data "configs:configs" --add-data "misc:misc" --add-data "version.txt:." --name "pgObjectsInstaller"
 ```
-works with Win PowerShell but with other CLI could be viable(care for special characters)
+works with Win PowerShell but with other CLI could be viable (care for special characters)
 
 # Quick start
 
-The default version of the app requires that your Postgresql repository has structure like here: [pg_dummydb](https://github.com/GTChimp/pg_dummydb), i.e. mandatory elements are 2 catalogs: OBJ - folder, containing your db structure represented as .sql files; Requests - folder, containing subfolders each of which should be named as ticket(Jira,Trello etc) and contain objects.inst file with list of objects to deploy.
+The default version of the app requires that your Postgresql repository has structure like here: [pg_dummydb](https://github.com/GTChimp/pg_dummydb), i.e., mandatory elements are two catalogs: OBJ - folder, containing your db structure represented as .sql files; Requests - folder, containing subfolders each of which should be named as ticket (Jira, Trello, etc.) and contain objects.inst file with list of objects to deploy.
 Also, the general recommendation is that the user/role used for the deployment was an owner of the database.
 
 
 # Configs
 
 Config files for the app should be located in the *configs* folder.  
-All files which are located there will be validated, and you will be able to choose proper cfg.  
+All files that are located there will be validated, and you will be able to choose the proper cfg.  
 Valid configs should have *.json* extension and have the following structure:
 ```
 {
@@ -69,6 +69,8 @@ Second option allows you to revert chosen db objects state to specific SHA-1/bra
 In order this feature to work, your release branch must have "objects.revert" file in the subfolder of "Requests" catalog.
 It works as follows: scripts from list which are located on "Requests" path will be copied from "release" branch, while 
 scripts from "OBJ" path will be copied from "revert" branch. Thus, you need to specify all paths correctly to make this work properly.
+# Copying grants feature
+If your deployment or revert scripts contain `DROP` statements for `VIEW`, `FUNCTION`, `PROCEDURE`, or `ROUTINE`, the app will automatically collect existing grants (excluding those for the current user) from the database before execution. After the objects are redeployed, these grants will be restored. This ensures that permissions are preserved even when objects are dropped and recreated.
 # Misc options
 #### List of additinal options
 
@@ -77,4 +79,4 @@ scripts from "OBJ" path will be copied from "revert" branch. Thus, you need to s
 # Notes
 
  - for now supported only UTF-8 files encoding
- - if your repository requires additional authentication(organization's policies etc.) and the credentials aren't stored in credentials manager you can get error trying to clone the repo first time
+ - if your repository requires additional authentication (organization's policies etc.) and the credentials aren't stored in credentials manager you can get error trying to clone the repo first time
